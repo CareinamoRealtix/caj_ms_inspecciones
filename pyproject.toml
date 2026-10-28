@@ -1,0 +1,50 @@
+[project]
+name = "ms-inspecciones"
+version = "0.1.0"
+description = "Microservicio de inspecciones"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "alembic>=1.16,<2",
+    "asyncpg>=0.30,<1",
+    "boto3>=1.35,<2",
+    "cryptography>=43",
+    "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
+    "msal>=1.28,<2",
+    "pydantic-settings>=2.9,<3",
+    "pyjwt>=2.13,<3",
+    "reportlab>=4.0,<5",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = [
+    "moto[s3,ssm]>=5",
+    "pre-commit>=4.2,<5",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.26,<2",
+    "ruff>=0.11,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ASYNC", "B", "E", "F", "I", "RUF", "UP"]
+ignore = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

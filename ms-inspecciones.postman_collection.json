@@ -1,0 +1,1753 @@
+{
+  "info": {
+    "_postman_id": "7208a3f5-4d5f-4e23-a30b-3ff43e242190",
+    "name": "ms-inspecciones",
+    "description": "Colección de los endpoints implementados por ms-inspecciones. Ejecute primero Operación / Ready y luego Formulario / Crear inspección. Esta última solicitud guarda automáticamente el UUID y el número de inspección devueltos por el backend en {{idInspeccion}} y {{numeroInspeccion}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Operación",
+      "description": "Comprobaciones del proceso y de PostgreSQL/PostGIS.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/health",
+            "description": "Confirma que FastAPI está respondiendo. No consulta la base de datos."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Servicio correcto\", () => pm.expect(pm.response.json().service).to.eql(\"ms-inspecciones\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/ready",
+            "description": "Comprueba la conectividad con PostgreSQL/PostGIS. Devuelve 503 si la base no está disponible."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Servicio preparado\", () => pm.expect(pm.response.json().status).to.eql(\"ready\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pruebas CORS",
+      "description": "Pruebas numeradas para validar los headers CORS devueltos por la API. Postman no bloquea solicitudes por CORS como un navegador, pero estos requests comprueban el contrato de preflight y de la respuesta real.",
+      "item": [
+        {
+          "name": "1. Preflight CORS (OPTIONS)",
+          "request": {
+            "method": "OPTIONS",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{corsOrigin}}",
+                "type": "text"
+              },
+              {
+                "key": "Access-Control-Request-Method",
+                "value": "GET",
+                "type": "text"
+              },
+              {
+                "key": "Access-Control-Request-Headers",
+                "value": "authorization,content-type,x-request-id",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/inspeccion/health",
+            "description": "Simula el preflight que realiza el navegador antes de una petición con headers no simples. Debe permitir el origen, GET, Authorization, Content-Type y X-Request-ID."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"1.1 Preflight responde HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"1.2 Permite cualquier origen\", () => pm.expect(pm.response.headers.get(\"Access-Control-Allow-Origin\")).to.eql(\"*\"));",
+                  "const metodos = pm.response.headers.get(\"Access-Control-Allow-Methods\") || \"\";",
+                  "pm.test(\"1.3 Permite el método GET\", () => pm.expect(metodos).to.include(\"GET\"));",
+                  "const headers = (pm.response.headers.get(\"Access-Control-Allow-Headers\") || \"\").toLowerCase();",
+                  "pm.test(\"1.4 Permite Authorization\", () => pm.expect(headers).to.include(\"authorization\"));",
+                  "pm.test(\"1.5 Permite Content-Type\", () => pm.expect(headers).to.include(\"content-type\"));",
+                  "pm.test(\"1.6 Permite X-Request-ID\", () => pm.expect(headers).to.include(\"x-request-id\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Petición real CORS (GET)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{corsOrigin}}",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/inspeccion/health",
+            "description": "Ejecuta una petición real con Origin y verifica que la respuesta permita cualquier origen y exponga X-Request-ID al frontend."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"2.1 Petición real responde HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"2.2 Permite cualquier origen\", () => pm.expect(pm.response.headers.get(\"Access-Control-Allow-Origin\")).to.eql(\"*\"));",
+                  "const expuestos = (pm.response.headers.get(\"Access-Control-Expose-Headers\") || \"\").toLowerCase();",
+                  "pm.test(\"2.3 Expone X-Request-ID\", () => pm.expect(expuestos).to.include(\"x-request-id\"));",
+                  "pm.test(\"2.4 Respuesta del servicio correcta\", () => pm.expect(pm.response.json().service).to.eql(\"ms-inspecciones\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Catálogos e inspectores",
+      "item": [
+        {
+          "name": "Obtener catálogo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/catalogo",
+            "description": "Obtiene tipos de inspección y periodicidades. Cada periodicidad incluye dias_vigencia en días calendario; Trimestral equivale a 90 días. Ya no retorna estados_inspeccion: el ciclo de vida de una inspección se determina con activa y fecha_realizada."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "const trimestral = data.periodicidades.find(item => item.nombre === \"Trimestral\");",
+                  "pm.test(\"El catálogo usa dias_vigencia\", () => pm.expect(data.periodicidades[0]).to.have.property(\"dias_vigencia\"));",
+                  "pm.test(\"La periodicidad trimestral es de 90 días\", () => pm.expect(trimestral.dias_vigencia).to.eql(90));",
+                  "pm.test(\"No expone dias_habiles\", () => pm.expect(data.periodicidades[0]).not.to.have.property(\"dias_habiles\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar inspectores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/inspectores",
+            "description": "Lista los miembros del grupo de inspectores configurado en Microsoft Entra ID. Cuando Graph retorna mail vacío, la API usa userPrincipalName como correo de respaldo. Requiere las variables AZURE_* del servicio."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gestión",
+      "item": [
+        {
+          "name": "Obtener catálogos de gestión",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/gestion/catalogos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "gestion",
+                "catalogos"
+              ]
+            },
+            "description": "Obtiene las opciones para los selectores superiores de Gestión. Los inspectores provienen del grupo Inspectores en Microsoft Entra ID y tienen el mismo contrato que GET /v1/inspeccion/inspectores. Los catálogos de bienes y ubicación se leen mediante inspecciones.v_catalogos_gestion; rutas sigue siendo temporal y alertas es un enum local. No recibe parámetros."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/gestion/catalogos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "gestion",
+                    "catalogos"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "content-type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"inspectores\": [\n    {\"displayName\": \"Cristian Flores\", \"mail\": \"CFlores@realcloud5.onmicrosoft.com\"}\n  ],\n  \"estatus_bien_inventario\": [\n    {\"id\": 1, \"estado\": \"Ocupada\"}\n  ],\n  \"alertas\": [\"TERMINO\", \"VENCIDA\", \"PROXIMA\"],\n  \"provincias\": [\n    {\"id\": 8, \"nombre\": \"Panamá\"}\n  ],\n  \"distritos\": [\n    {\"id\": 1, \"nombre\": \"Panamá\", \"id_provincia\": 8}\n  ],\n  \"corregimientos\": [\n    {\"id\": 4, \"nombre\": \"Bella Vista\", \"id_distrito\": 1}\n  ],\n  \"rutas\": [\n    {\"id\": \"00000000-0000-4000-8000-000000000101\", \"codigo\": \"RUTA-001\", \"nombre\": \"Ruta Centro\"}\n  ]\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Retorna las siete colecciones\", () => pm.expect(data).to.have.all.keys(\"inspectores\", \"estatus_bien_inventario\", \"alertas\", \"provincias\", \"distritos\", \"corregimientos\", \"rutas\"));",
+                  "pm.test(\"Estatus de bienes disponibles sin Vendido\", () => { pm.expect(data.estatus_bien_inventario).not.to.be.empty; pm.expect(data.estatus_bien_inventario[0]).to.include.all.keys(\"id\", \"estado\"); pm.expect(data.estatus_bien_inventario.some(item => item.id === 6)).to.eql(false); });",
+                  "pm.test(\"Alertas configuradas\", () => pm.expect(data.alertas).to.eql([\"TERMINO\", \"VENCIDA\", \"PROXIMA\"]));",
+                  "pm.test(\"Catálogos geográficos disponibles\", () => { pm.expect(data.provincias).not.to.be.empty; pm.expect(data.distritos).not.to.be.empty; pm.expect(data.corregimientos).not.to.be.empty; });",
+                  "pm.test(\"Distritos conservan la provincia\", () => pm.expect(data.distritos[0]).to.have.property(\"id_provincia\"));",
+                  "pm.test(\"Corregimientos conservan el distrito\", () => pm.expect(data.corregimientos[0]).to.have.property(\"id_distrito\"));",
+                  "pm.test(\"Inspectores de Entra disponibles\", () => pm.expect(data.inspectores[0]).to.include.all.keys(\"displayName\", \"mail\"));",
+                  "pm.test(\"Rutas temporales disponibles\", () => pm.expect(data.rutas[0]).to.include.all.keys(\"id\", \"nombre\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar bienes para gestión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/gestion?pagina={{pagina}}&tamanio={{tamanio}}&estatus_bien_inventario={{estatusBienInventarioId}}&provincia={{provinciaId}}&distrito={{distritoId}}&corregimiento={{corregimientoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "gestion"
+              ],
+              "query": [
+                {
+                  "key": "pagina",
+                  "value": "{{pagina}}"
+                },
+                {
+                  "key": "tamanio",
+                  "value": "{{tamanio}}"
+                },
+                {
+                  "key": "numero_finca",
+                  "value": "{{numeroFinca}}",
+                  "disabled": true
+                },
+                {
+                  "key": "estatus_bien_inventario",
+                  "value": "{{estatusBienInventarioId}}"
+                },
+                {
+                  "key": "provincia",
+                  "value": "{{provinciaId}}"
+                },
+                {
+                  "key": "distrito",
+                  "value": "{{distritoId}}"
+                },
+                {
+                  "key": "corregimiento",
+                  "value": "{{corregimientoId}}"
+                },
+                {
+                  "key": "nuevo_ingreso",
+                  "value": "{{nuevoIngreso}}",
+                  "disabled": true
+                },
+                {
+                  "key": "alerta",
+                  "value": "{{alerta}}",
+                  "disabled": true
+                },
+                {
+                  "key": "ruta",
+                  "value": "{{rutaId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "inspector",
+                  "value": "{{emailInspector}}",
+                  "disabled": true
+                },
+                {
+                  "key": "month_last_insp",
+                  "value": "{{monthLastInsp}}",
+                  "disabled": true
+                },
+                {
+                  "key": "fecha_desde",
+                  "value": "{{fechaDesde}}",
+                  "disabled": true
+                },
+                {
+                  "key": "fecha_hasta",
+                  "value": "{{fechaHasta}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consulta la vista local de inventario y combina cada bien con su inspección activa. numero_finca hace una búsqueda parcial tanto en las fincas de la vista como en inspecciones.inspeccion y solo emite las fincas coincidentes. Siempre excluye bienes con estado_inventario = 'borrador' (comparación insensible a mayúsculas) y bienes con estatus Vendido (id_estatus_bien = 6), además de exigir es_activo = TRUE. Sin nuevo_ingreso=true exige que el bien tenga al menos una inspección registrada (con o sin fecha_vencimiento) y ordena por estado de vencimiento: primero VENCIDAS (la más vencida primero), luego PROXIMAS (vencen en los próximos 10 días, la que vence antes primero), luego A TÉRMINO (la más cercana primero) y al final las que no tienen fecha de vencimiento. Un bien con varias fincas puede generar más de un elemento en data, uno por cada numero_finca con inspecciones propias; total_registros y total_paginas cuentan bienes de inventario, no elementos de data. ruta_id y ruta_nombre provienen de la inspección activa cuando existe; si no, de la asignación en bien_inventario_ruta (ambos null si no hay ninguna). inspeccion_ruta_id, inspeccion_ruta_nombre, inspeccion_email_inspector, inspeccion_id_periodicidad, inspeccion_periodicidad, inspeccion_tipo_inspeccion e inspeccion_descripcion_tipo reflejan siempre los datos de la inspección activa (null si no existe). fecha_desde y fecha_hasta delimitan de forma inclusiva la fecha de la última inspección realizada. month_last_insp recibe un entero de 1 a 12; el backend agrega el año actual y filtra por el mes de la última inspección realizada. ruta recibe el UUID de una ruta y retorna los bienes asociados mediante bien_inventario_ruta. inspector recibe el email del inspector y retorna los bienes cuya inspección más reciente pertenece a ese inspector. alerta admite TERMINO, VENCIDA o PROXIMA y evalúa exclusivamente la fecha_vencimiento de la inspección más reciente. estatus_bien_inventario recibe el id del catálogo de gestion/catalogos. provincia puede usarse sola; distrito requiere provincia; corregimiento requiere provincia y distrito (422 si falta alguno). Cada fila trae además estado_alerta (VENCIDA, PROXIMA, TERMINO o null) y color_alerta (hex), calculados desde fecha_vencimiento con las mismas reglas que /control; estado_inspeccion conserva su significado (Activa o null)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Control",
+      "item": [
+        {
+          "name": "Listar bienes para control",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/control?pagina={{pagina}}&tamanio={{tamanio}}&inspector={{emailInspector}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "control"
+              ],
+              "query": [
+                {
+                  "key": "pagina",
+                  "value": "{{pagina}}"
+                },
+                {
+                  "key": "tamanio",
+                  "value": "{{tamanio}}"
+                },
+                {
+                  "key": "numero_finca",
+                  "value": "{{numeroFinca}}",
+                  "disabled": true
+                },
+                {
+                  "key": "estatus_bien_inventario",
+                  "value": "{{estatusBienInventarioId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "provincia",
+                  "value": "{{provinciaId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "distrito",
+                  "value": "{{distritoId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "corregimiento",
+                  "value": "{{corregimientoId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "alerta",
+                  "value": "{{alerta}}",
+                  "disabled": true
+                },
+                {
+                  "key": "inspector",
+                  "value": "{{emailInspector}}"
+                },
+                {
+                  "key": "month_expiration",
+                  "value": "{{monthExpiration}}",
+                  "disabled": true
+                },
+                {
+                  "key": "fecha_desde",
+                  "value": "{{fechaDesde}}",
+                  "disabled": true
+                },
+                {
+                  "key": "fecha_hasta",
+                  "value": "{{fechaHasta}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consulta los bienes para la pantalla de control mediante ControlResponse. Incluye TODAS las fincas de cada bien activo (excepto los de estatus Vendido, id_estatus_bien = 6), tengan o no inspecciones: con inspección finalizada, con inspección solo activa/programada, o sin ninguna inspección. Cuando una finca nunca fue finalizada, numero_inspeccion, estado_inspeccion, color_alerta y fecha_vencimiento quedan en null en esa fila. El orden es el mismo que en /gestion: VENCIDAS (la más vencida primero), PROXIMAS, A TÉRMINO y sin fecha al final. numero_inspeccion corresponde a la última inspección finalizada de cada finca, ordenada por fecha_realizada y numero_inspeccion descendentes, con formato INSP-###. estatus_bien_inventario recibe el ID del mismo catálogo usado por /gestion. En cada fila el backend calcula estado_inspeccion desde fecha_vencimiento: VENCIDA si ya pasó, PROXIMA si vence entre hoy y los próximos 10 días inclusive, TERMINO si vence después de 10 días y null si no hay fecha. numero_finca hace una búsqueda parcial tanto en las fincas de la vista como en inspecciones.inspeccion y solo emite las fincas coincidentes. No admite nuevo_ingreso, ruta ni month_last_insp. Los filtros inspector, alerta y month_expiration evalúan la inspección más reciente o su fecha_vencimiento, así que excluyen naturalmente a las fincas sin inspección finalizada. month_expiration recibe un entero de 1 a 12; el backend agrega el año actual y filtra por el mes de fecha_vencimiento de la última inspección finalizada del bien (activa=false y fecha_realizada informada)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Formulario",
+      "description": "Catálogos del modal, creación, consulta y reprogramación de inspecciones.",
+      "item": [
+        {
+          "name": "Obtener catálogos del formulario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/inspeccion/formulario/catalogos",
+            "description": "Carga rutas desde la base de datos, inspectores desde Microsoft Entra ID, tipos de inspección y periodicidades para los selectores del modal Programar inspección."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Retorna todos los catálogos del modal\", () => {",
+                  "    pm.expect(data).to.have.property(\"rutas\").that.is.an(\"array\");",
+                  "    pm.expect(data).to.have.property(\"inspectores\").that.is.an(\"array\");",
+                  "    pm.expect(data).to.have.property(\"tipos_inspeccion\").that.is.an(\"array\");",
+                  "    pm.expect(data).to.have.property(\"periodicidades\").that.is.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear inspección",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bien_inventario\": \"{{idBienInventario}}\",\n  \"numero_finca\": \"{{numeroFinca}}\",\n  \"ruta_id\": \"{{rutaId}}\",\n  \"ruta_nombre\": \"{{rutaNombre}}\",\n  \"id_tipo_inspeccion\": 1,\n  \"descripcion_tipo\": null,\n  \"email_inspector\": \"{{emailInspector}}\",\n  \"id_periodicidad\": {{idPeriodicidad}},\n  \"fecha_programada\": \"{{fechaProgramada}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/formulario",
+            "description": "Programa una inspección, genera id_inspeccion en el backend y calcula fecha_vencimiento con los días de la periodicidad seleccionada. numero_finca no tiene un límite de longitud definido por la API."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    pm.collectionVariables.set(\"idInspeccion\", data.id_inspeccion);",
+                  "    pm.collectionVariables.set(\"numeroInspeccion\", String(data.numero_inspeccion));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear inspecciones por lote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bienes\": [\n    {\n      \"id_bien_inventario\": \"{{idBienInventario}}\",\n      \"numero_finca\": \"{{numeroFinca}}\"\n    },\n    {\n      \"id_bien_inventario\": \"00000000-0000-4000-8000-000000000003\",\n      \"numero_finca\": \"FINCA-002\"\n    }\n  ],\n  \"ruta_id\": \"{{rutaId}}\",\n  \"ruta_nombre\": \"{{rutaNombre}}\",\n  \"id_tipo_inspeccion\": 1,\n  \"descripcion_tipo\": null,\n  \"email_inspector\": \"{{emailInspector}}\",\n  \"id_periodicidad\": {{idPeriodicidad}},\n  \"fecha_programada\": \"{{fechaProgramada}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/formulario/batch",
+            "description": "Programa inspecciones para uno o más bienes, sin un máximo definido por la API, con la misma ruta, inspector, tipo, periodicidad y fecha. Comportamiento upsert por (id_bien_inventario, numero_finca): si el par no tiene una inspección activa, crea una nueva; si ya tiene una, actualiza esa misma fila (igual que PUT /formulario/{id}) y conserva su id_inspeccion y numero_inspeccion. id_bien_inventario puede repetirse con distinto numero_finca; el par exacto no puede repetirse. total_creadas cuenta todos los elementos devueltos, incluidas las actualizaciones. numero_finca no tiene un límite de longitud definido por la API."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Retorna las inspecciones creadas\", () => {",
+                  "    pm.expect(data.total_creadas).to.eql(data.inspecciones.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar formulario",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/formulario/{{idInspeccion}}",
+            "description": "Obtiene los datos actuales, incluida la periodicidad seleccionada (id_periodicidad, periodicidad y dias_vigencia) y la fecha de vencimiento calculada, para reprogramar."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Expone la periodicidad de la inspección\", () => {",
+                  "    pm.expect(data).to.have.property(\"id_periodicidad\");",
+                  "    pm.expect(data).to.have.property(\"periodicidad\");",
+                  "    pm.expect(data).to.have.property(\"dias_vigencia\");",
+                  "});",
+                  "pm.test(\"Expone fecha_vencimiento\", () => pm.expect(data).to.have.property(\"fecha_vencimiento\"));",
+                  "pm.test(\"No expone fecha_siguiente_programacion\", () => pm.expect(data).not.to.have.property(\"fecha_siguiente_programacion\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reprogramar inspección",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_bien_inventario\": \"{{idBienInventario}}\",\n  \"numero_finca\": \"{{numeroFinca}}\",\n  \"ruta_id\": \"{{rutaId}}\",\n  \"ruta_nombre\": \"{{rutaNombre}}\",\n  \"id_tipo_inspeccion\": 1,\n  \"descripcion_tipo\": null,\n  \"email_inspector\": \"{{emailInspector}}\",\n  \"id_periodicidad\": {{idPeriodicidad}},\n  \"fecha_programada\": \"{{fechaReprogramada}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/formulario/{{idInspeccion}}",
+            "description": "Reprograma la inspección y recalcula fecha_vencimiento con la periodicidad seleccionada. No permite modificar una inspección finalizada."
+          },
+          "response": []
+        },
+        {
+          "name": "Editar inspección sin cambiar bien",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruta_id\": \"{{rutaId}}\",\n  \"ruta_nombre\": \"{{rutaNombre}}\",\n  \"id_tipo_inspeccion\": 1,\n  \"descripcion_tipo\": null,\n  \"email_inspector\": \"{{emailInspector}}\",\n  \"id_periodicidad\": {{idPeriodicidad}},\n  \"fecha_programada\": \"{{fechaReprogramada}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/formulario/{{idInspeccion}}",
+            "description": "Edita una inspección no finalizada. No admite id_bien_inventario ni numero_finca y conserva ambos valores existentes."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Histórico",
+      "item": [
+        {
+          "name": "Listar histórico de inspecciones de una finca",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/historico?numero_finca={{numeroFinca}}&pagina={{pagina}}&tamanio={{tamanio}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "historico"
+              ],
+              "query": [
+                {
+                  "key": "numero_finca",
+                  "value": "{{numeroFinca}}"
+                },
+                {
+                  "key": "pagina",
+                  "value": "{{pagina}}"
+                },
+                {
+                  "key": "tamanio",
+                  "value": "{{tamanio}}"
+                },
+                {
+                  "key": "provincia",
+                  "value": "{{provinciaId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "distrito",
+                  "value": "{{distritoId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "corregimiento",
+                  "value": "{{corregimientoId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "ruta",
+                  "value": "{{rutaId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "inspector",
+                  "value": "{{emailInspector}}",
+                  "disabled": true
+                },
+                {
+                  "key": "month_last_insp",
+                  "value": "{{monthLastInsp}}",
+                  "disabled": true
+                },
+                {
+                  "key": "fecha_desde",
+                  "value": "{{fechaDesde}}",
+                  "disabled": true
+                },
+                {
+                  "key": "fecha_hasta",
+                  "value": "{{fechaHasta}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Devuelve unicamente las inspecciones finalizadas (activa=false y fecha_realizada informada) de la finca indicada en numero_finca; elimina espacios exteriores y compara la finca por igualdad exacta directamente contra inspecciones.inspeccion. La inspeccion activa, si existe, no se incluye. Usa el contrato reducido HistoricoResponse (no el GestionResponse de /gestion y /control). Cada elemento de data trae id_inspeccion, id_bien_inventario, numero_finca, numero_inspeccion (formateado como INSP-### con ceros a la izquierda hasta 3 dígitos, ej. INSP-001, INSP-5369), email_inspector, fecha_programada, fecha_realizada, fecha_vencimiento, fecha_creacion, fecha_modificacion, activa (siempre false) y estado_inspeccion (siempre 'Finalizada'). Sin numero_finca responde data: [] y total_registros: 0. provincia/distrito/corregimiento filtran por ubicación del bien; distrito requiere provincia y corregimiento requiere provincia y distrito (422 si faltan). ruta recibe el UUID de una ruta y retorna solo bienes asociados mediante bien_inventario_ruta (misma condicion que /gestion y /control). inspector filtra por email_inspector exacto de cada inspeccion (comparacion directa, a diferencia de /gestion que usa la inspeccion mas reciente del bien). month_last_insp recibe un entero de 1 a 12, el backend agrega el ano actual y filtra por el mes de fecha_realizada de cada inspeccion. fecha_desde y fecha_hasta delimitan de forma inclusiva fecha_realizada; un rango invertido retorna 422."
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener detalle completo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/{{idInspeccion}}/detalle",
+            "description": "Obtiene la inspección, su levantamiento y sus fotografías. En levantamiento.servicios_requeridos los servicios vienen agrupados por tipo: {\"LIMPIEZA\": [...], \"CERRAJERIA_MATERIAL\": [...], \"REPARACION\": [...]} (null si no se registró ninguno)."
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener fotografías",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/{{idInspeccion}}/fotografias",
+            "description": "Catálogo de fotografías de la inspección (id_fotografia, url_s3, es_visible_geovisor, es_foto_principal, orden; url_s3 llega como URL firmada de CloudFront cuando la firma está activa), para que el frontend arme la selección antes de mandarla a Actualizar fotografías."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar fotografías",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fotografias\": [\n    {\n      \"id_fotografia\": \"{{idFotografia}}\",\n      \"es_visible_geovisor\": true,\n      \"es_foto_principal\": true\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/{{idInspeccion}}/fotografias",
+            "description": "Actualiza visibilidad y foto principal. Solo una fotografía puede marcarse como principal."
+          },
+          "response": []
+        },
+        {
+          "name": "Descargar informe PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/{{idInspeccion}}/pdf",
+            "description": "Genera el informe PDF. En Postman use Save Response > Save to a file para conservarlo."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Levantamiento",
+      "item": [
+        {
+          "name": "Obtener catálogo de levantamiento",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/inspeccion/levantamiento/catalogos",
+            "description": "Catálogo de opciones del formulario de levantamiento (HU 8), agrupadas por tipo_catalogo (CONDICION_BIEN, ESTADO_OCUPACION, TIPO_IDENTIFICACION_OCUPANTE, UBICACION_PUERTA, PUERTA_MATERIAL, VENTANA_TIPO, SERVICIO_PUBLICO, DISTRIBUCION_INMUEBLE, LIMPIEZA, CERRAJERIA_MATERIAL, REPARACION, INSPECCION_TECNICA). Los códigos que finalizan un levantamiento deben salir de aquí. No depende de ENABLE_DIRECT_LEVANTAMIENTO_ENDPOINT."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Incluye version\", () => pm.expect(data).to.have.property(\"version\"));",
+                  "pm.test(\"Incluye CONDICION_BIEN\", () => pm.expect(data.catalogos).to.have.property(\"CONDICION_BIEN\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar levantamiento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_operacion\": \"{{$guid}}\",\n  \"coordenadas\": \"8.9824,-79.5199\",\n  \"condicion_bien\": \"REGULAR\",\n  \"estado_ocupacion\": \"OCUPADO\",\n  \"nombre_ocupante\": \"Juan Pérez\",\n  \"tipo_identificacion_ocup\": \"CEDULA\",\n  \"numero_identificacion_ocup\": \"8-123-456\",\n  \"numero_contacto_ocupante\": \"6123-4567\",\n  \"comentarios_ocupante\": \"Lleva 3 meses ocupando\",\n  \"puertas\": {\n    \"ENTRADA_PRINCIPAL\": [{\"codigo\": \"HIERRO\", \"cantidad\": 1}]\n  },\n  \"tipos_ventanas\": [{\"codigo\": \"FRANCESA\", \"cantidad\": 4}],\n  \"servicios_publicos\": [{\"codigo\": \"LUZ_CONECTADA\"}, {\"codigo\": \"AGUA_MEDIDOR\"}],\n  \"distribucion_inmueble\": [{\"codigo\": \"RECAMARA\", \"cantidad\": 3}, {\"codigo\": \"BANOS\", \"cantidad\": 2}],\n  \"servicios_requeridos\": {\"LIMPIEZA\": [{\"codigo\": \"INTERNA\"}, {\"codigo\": \"EXTERNA\"}], \"CERRAJERIA_MATERIAL\": [{\"codigo\": \"HIERRO\", \"cantidad\": 2}], \"REPARACION\": [{\"codigo\": \"OTRAS_REPARACIONES\", \"descripcion\": \"Cambiar cañería del baño\"}]},\n  \"inspeccion_tecnica_req\": false,\n  \"tipos_inspeccion_tecnica\": [],\n  \"motivacion\": null,\n  \"url_firma_inspector\": null,\n  \"observaciones\": \"Levantamiento de prueba desde Postman\",\n  \"fecha_levantamiento\": \"{{fechaLevantamiento}}\",\n  \"fotografias\": [\n    {\n      \"url\": \"https://via.placeholder.com/600x400\",\n      \"nombre_archivo\": \"fachada.jpg\",\n      \"es_visible_geovisor\": true,\n      \"es_foto_principal\": true,\n      \"orden\": 0\n    },\n    {\n      \"url\": \"https://via.placeholder.com/600x400/CCCCCC\",\n      \"nombre_archivo\": \"interior.jpg\",\n      \"es_visible_geovisor\": true,\n      \"es_foto_principal\": false,\n      \"orden\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/{{idInspeccion}}/levantamiento",
+            "description": "Finaliza el levantamiento; ya no admite borradores ni el campo accion. id_operacion es un UUID generado por el cliente: reenviarlo con el mismo cuerpo devuelve 200 con la misma respuesta (idempotencia), con otro cuerpo devuelve 409, igual que sobre una inspección ya finalizada por otra operación. Los códigos de condicion_bien, estado_ocupacion y de cada selección deben existir en Obtener catálogo de levantamiento. Ocupado o Invadido exigen nombre_ocupante y numero_contacto_ocupante. Requiere ENABLE_DIRECT_LEVANTAMIENTO_ENDPOINT=true en el servidor; si está apagado responde 404. servicios_requeridos es un objeto agrupado por tipo de servicio: {\"LIMPIEZA\": [...], \"CERRAJERIA_MATERIAL\": [...], \"REPARACION\": [...]}; cada grupo se valida contra su propio catálogo (un código en el grupo equivocado, un grupo desconocido, una lista plana o códigos repetidos dentro de un grupo responden 422). Sin servicios: omitir el campo, null o {}."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200 o 201\", () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    pm.collectionVariables.set(\"idLevantamiento\", pm.response.json().id_levantamiento);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar levantamientos por lote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"levantamientos\": [\n    {\n      \"id_inspeccion\": \"{{idInspeccion}}\",\n      \"id_operacion\": \"{{$guid}}\",\n      \"coordenadas\": \"8.9824,-79.5199\",\n      \"condicion_bien\": \"REGULAR\",\n      \"estado_ocupacion\": \"DESOCUPADO\",\n      \"servicios_publicos\": [{\"codigo\": \"LUZ_CONECTADA\"}],\n      \"servicios_requeridos\": {\"LIMPIEZA\": [{\"codigo\": \"INTERNA\"}, {\"codigo\": \"EXTERNA\"}], \"CERRAJERIA_MATERIAL\": [{\"codigo\": \"HIERRO\", \"cantidad\": 2}], \"REPARACION\": [{\"codigo\": \"OTRAS_REPARACIONES\", \"descripcion\": \"Cambiar cañería del baño\"}]},\n      \"inspeccion_tecnica_req\": false,\n      \"tipos_inspeccion_tecnica\": [],\n      \"fecha_levantamiento\": \"{{fechaLevantamiento}}\",\n      \"fotografias\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/levantamiento/batch",
+            "description": "Finaliza el levantamiento de campo de varias inspecciones en un solo llamado. Cada elemento de levantamientos se procesa con exactamente la misma lógica y las mismas consecuencias que Finalizar levantamiento (mismas reglas de negocio, misma idempotencia por id_operacion, mismas fotografías, mismo webhook a ms-requerimientos), uno a la vez. Un ítem inválido o en conflicto no aborta el lote: queda reportado como fallido en resultados y el resto se procesa igual. La respuesta siempre es 200; el éxito o fracaso de cada inspección se lee en resultados[].exito y resultados[].codigo_error (no_encontrada, contenido_diferente, ya_finalizada, otra_inspeccion o codigo_catalogo_invalido). No se permite repetir el mismo id_inspeccion dentro de un mismo lote (422). Requiere ENABLE_DIRECT_LEVANTAMIENTO_ENDPOINT=true en el servidor; si está apagado responde 404. servicios_requeridos es un objeto agrupado por tipo de servicio: {\"LIMPIEZA\": [...], \"CERRAJERIA_MATERIAL\": [...], \"REPARACION\": [...]}; cada grupo se valida contra su propio catálogo (un código en el grupo equivocado, un grupo desconocido, una lista plana o códigos repetidos dentro de un grupo responden 422). Sin servicios: omitir el campo, null o {}."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"total coincide con la cantidad de resultados\", () => pm.expect(data.total).to.eql(data.resultados.length));",
+                  "pm.test(\"exitosos + fallidos = total\", () => pm.expect(data.exitosos + data.fallidos).to.eql(data.total));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sincronización",
+      "item": [
+        {
+          "name": "Descarga (Batch + CloudFront)",
+          "description": "Etapa 1 de HU.12: el móvil pide generar el paquete de sincronización y lo descarga cuando está listo. Ejecute 1, repita 2 hasta «listo» y luego 3.",
+          "item": [
+            {
+              "name": "1. Iniciar sincronización (genera el ZIP)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-User-Email",
+                    "value": "{{xUserEmail}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/sincronizacion",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "sincronizacion"
+                  ]
+                },
+                "description": "Descarga, paso 1. El inspector toca «Sincronizar»: el body es opcional; con origen (latitud, longitud y precision_m opcional, posición GPS del inspector) el paquete incluye una ruta óptima por fecha calculada con OSRM desde ese punto, y sin body (o sin origen) se genera sin rutas. Luego la API crea el job en la base y lo encola en AWS Batch (Fargate). Responde 202 con el job_id sin esperar a que termine. Guarda job_id en {{jobId}}. Responde 503 si SINCRONIZACION_HABILITADA=false y 502 si no se pudo encolar.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"origen\": {\n    \"latitud\": 8.9824,\n    \"longitud\": -79.5199,\n    \"precision_m\": 15\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                      "const data = pm.response.json();",
+                      "pm.test(\"Devuelve job_id y estado pendiente\", () => { pm.expect(data.job_id).to.be.a(\"string\"); pm.expect(data.estado).to.eql(\"pendiente\"); });",
+                      "pm.collectionVariables.set(\"jobId\", data.job_id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. Consultar estado (long polling)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-User-Email",
+                    "value": "{{xUserEmail}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/sincronizacion/{{jobId}}?espera=25",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "sincronizacion",
+                    "{{jobId}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "espera",
+                      "value": "25"
+                    }
+                  ]
+                },
+                "description": "Descarga, paso 2. Long polling: la API mantiene la petición abierta hasta ~25 s (parámetro espera, máx. 50, tope de servidor 25) esperando que el job termine. Si responde pendiente/procesando, vuelva a ejecutarla de inmediato hasta ver listo o error (Fargate tarda de 30 s a 2 min en arrancar). Con listo trae url_firmada y la guarda en {{urlDescarga}}. 404 si el job no existe o es de otro inspector."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                      "const data = pm.response.json();",
+                      "pm.test(\"Estado válido\", () => pm.expect([\"pendiente\",\"procesando\",\"listo\",\"error\"]).to.include(data.estado));",
+                      "if (data.estado === \"listo\") { pm.test(\"Incluye url_firmada\", () => pm.expect(data.url_firmada).to.be.a(\"string\")); pm.collectionVariables.set(\"urlDescarga\", data.url_firmada); }",
+                      "else if (data.estado === \"error\") { console.log(\"Error del job:\", data.error); }",
+                      "else { console.log(\"Aún \" + data.estado + \": vuelva a ejecutar esta solicitud.\"); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3. Descargar el ZIP (CloudFront)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlDescarga}}"
+                },
+                "description": "Descarga, paso 3. Descarga el sincronizacion.zip desde CloudFront con la url_firmada del paso 2 (sin cabeceras de la API). La URL vence en SINCRONIZACION_URL_TTL_SEGUNDOS (120 s) cuando las URL firmadas están activas; si da 403, repita el paso 2. Use «Save Response > Save to a file» y descomprima: contiene sincronizacion.json."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                      "pm.test(\"Es un ZIP\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"zip\"));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Subida de levantamientos (ZIP)",
+          "description": "Etapa 2 de HU.12: el móvil sube un ZIP con JSON + fotos + firma y la API lo procesa en Batch. Ejecute 1, 2, 3 y repita 4 hasta un estado final.",
+          "item": [
+            {
+              "name": "1. Crear subida (pide URL de carga)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-User-Email",
+                    "value": "{{xUserEmail}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/subidas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "subidas"
+                  ]
+                },
+                "description": "Subida, paso 1. Antes, arme el ZIP (ver docs/planes/GUIA_PRUEBAS_SINCRONIZACION_ENDPOINTS.md) y calcule su tamaño y su SHA-256; póngalos en las variables zipTamanoBytes y zipSha256, y en cantidadLevantamientos cuántos levantamientos trae. La API registra la subida y devuelve una URL prefirmada de S3 (PUT) atada a ese tamaño exacto; vence en SUBIDA_URL_TTL_SEGUNDOS (15 min). Guarda subida_id en {{subidaId}} y url_carga en {{urlCarga}}. 413 si supera los límites (200 MB / 500 levantamientos), 422 si el body es inválido, 503 si está deshabilitada.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tamano_bytes\": {{zipTamanoBytes}},\n  \"sha256\": \"{{zipSha256}}\",\n  \"cantidad_levantamientos\": {{cantidadLevantamientos}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                      "const data = pm.response.json();",
+                      "pm.test(\"Devuelve subida_id y url_carga\", () => { pm.expect(data.subida_id).to.be.a(\"string\"); pm.expect(data.url_carga).to.include(\"X-Amz-Signature\"); });",
+                      "pm.collectionVariables.set(\"subidaId\", data.subida_id);",
+                      "pm.collectionVariables.set(\"urlCarga\", data.url_carga);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. Subir el ZIP directo a S3 (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/zip",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlCarga}}"
+                },
+                "description": "Subida, paso 2. Sube el ZIP directo al bucket temporal con la URL prefirmada (no pasa por la API, no lleva X-User-Email). En Body > binary elija el archivo .zip: su tamaño debe ser EXACTAMENTE zipTamanoBytes y el Content-Type application/zip, o S3 responde 403 (SignatureDoesNotMatch). Éxito: 200 sin cuerpo.",
+                "body": {
+                  "mode": "file",
+                  "file": {}
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3. Confirmar la subida (encola el procesamiento)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-User-Email",
+                    "value": "{{xUserEmail}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/subidas/{{subidaId}}/confirmar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "subidas",
+                    "{{subidaId}}",
+                    "confirmar"
+                  ]
+                },
+                "description": "Subida, paso 3. La API verifica con HeadObject que el ZIP llegó y su tamaño coincide, y encola el job de Batch (procesar_subida). Responde 202. Es idempotente: reintentarla no encola dos veces. 409 si el archivo no está o el tamaño no coincide (vuelva a subirlo), 404 si la subida no es suya, 502 si no se pudo encolar."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+                      "pm.test(\"Estado pendiente o posterior\", () => pm.expect([\"pendiente\",\"procesando\",\"listo\",\"parcial\",\"error\"]).to.include(pm.response.json().estado));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4. Consultar resultado (long polling)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-User-Email",
+                    "value": "{{xUserEmail}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/subidas/{{subidaId}}?espera=25",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "subidas",
+                    "{{subidaId}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "espera",
+                      "value": "25"
+                    }
+                  ]
+                },
+                "description": "Subida, paso 4. Long polling hasta que el job termine (vuelva a ejecutarla mientras diga pendiente/procesando). Estados finales: listo (todos los levantamientos bien), parcial (algunos fallaron: mire resultados[].codigo_error) y error (ZIP inválido o fallo del job). Cada elemento de resultados trae id_inspeccion, exito, id_levantamiento y, si falló, codigo_error (no_encontrada, ya_finalizada, contenido_diferente, otra_inspeccion, codigo_catalogo_invalido, datos_invalidos, archivo_faltante, imagen_invalida)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                      "const data = pm.response.json();",
+                      "pm.test(\"Estado válido\", () => pm.expect([\"pendiente_carga\",\"pendiente\",\"procesando\",\"listo\",\"parcial\",\"error\"]).to.include(data.estado));",
+                      "if ([\"listo\",\"parcial\",\"error\"].includes(data.estado)) { console.log(JSON.stringify(data.resultados, null, 2)); }",
+                      "else { console.log(\"Aún \" + data.estado + \": vuelva a ejecutar esta solicitud.\"); }"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Provisional (JSON al vuelo)",
+          "description": "Endpoint provisional anterior, sustituido por la carpeta «Descarga».",
+          "item": [
+            {
+              "name": "Sincronizar inspecciones del día (provisional)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/inspeccion/sincronizacion?email_inspector={{emailInspector}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "inspeccion",
+                    "sincronizacion"
+                  ],
+                  "query": [
+                    {
+                      "key": "email_inspector",
+                      "value": "{{emailInspector}}"
+                    }
+                  ]
+                },
+                "description": "Endpoint provisional (HU.12), sustituto temporal del job real de AWS Batch (ver sincronizacion-diseno-json.md en la raiz del repo). Devuelve en un solo JSON: las inspecciones programadas y activas para HOY (fecha_programada = CURRENT_DATE, activa = true) del inspector indicado en email_inspector, la vista de finca (inspecciones.v_consulta_inventario) de cada una, el precargue del ultimo levantamiento finalizado para esa misma combinacion id_bien_inventario + numero_finca (null si nunca hubo uno), y los catalogos necesarios para diligenciarlas offline (tipos_inspeccion, periodicidades, rutas, levantamiento_opciones agrupadas por tipo_catalogo, y catalogos_inventario con estatus_bien_inventario/provincias/distritos/corregimientos desde inspecciones.v_catalogos_gestion). No incluye fotografias. rutas_optimas siempre viene vacio en esta version (HU.11 pendiente de definir geometria). catalogos.version es un timestamp de generacion (datetime.now(UTC)), igual patron que GET /levantamiento/catalogos: no es un hash de contenido. Sin autenticacion propia mas alla del query param email_inspector."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notificaciones",
+      "description": "Bandeja de notificaciones propia del módulo de Inspecciones (tabla inspecciones.notificacion), independiente de la tabla de notificaciones de Coactivo.",
+      "item": [
+        {
+          "name": "Listar notificaciones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/notificaciones?pagina={{pagina}}&tamanio={{tamanio}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "notificaciones"
+              ],
+              "query": [
+                {
+                  "key": "pagina",
+                  "value": "{{pagina}}"
+                },
+                {
+                  "key": "tamanio",
+                  "value": "{{tamanio}}"
+                },
+                {
+                  "key": "estado",
+                  "value": "NO_LEIDA",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista las notificaciones del usuario, por email o por cualquiera de sus roles. Requiere siempre un JWT real de Entra ID en bearerToken (no hay atajo por IS_LOCAL para este módulo). Sin el parámetro estado trae solo las no silenciadas (NO_LEIDA); usar estado=SILENCIADA para ver las silenciadas. Cada item trae fue_vista (booleano, si el lector ya la abrió, independiente de si está silenciada) y estado (NO_LEIDA o SILENCIADA, deriva de notificacion_lectura.fue_silenciada); la respuesta no expone un campo fue_silenciada aparte, ese booleano solo vive en la tabla notificacion_lectura. También incluye icono, path, modal y creador. total_no_leidas siempre refleja el conteo real de no leídas, independiente del filtro estado aplicado."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear notificación (rol)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rol\": \"OFICIAL_BIENES_ADQUIRIDOS\",\n  \"tipo_notificacion\": \"TECNICA_REQUERIDA\",\n  \"titulo\": \"Inspección técnica requerida\",\n  \"mensaje\": \"La inspección No. {{numeroInspeccion}} requiere inspección técnica\",\n  \"referencia_tipo\": \"INSPECCION\",\n  \"referencia_id\": \"{{idInspeccion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/notificaciones",
+            "description": "Ya no resuelve miembros de Microsoft Entra ID: inserta una única fila con rol_destino. Cualquier usuario cuyo token incluya ese rol la verá al listar. Si referencia_tipo y referencia_id vienen informados, cierra (CERRADA) las notificaciones previas con el mismo rol_destino y la misma combinación (referencia_tipo, referencia_id, tipo_notificacion) que sigan activas."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.id_notificacion) {",
+                  "        pm.collectionVariables.set(\"idNotificacion\", data.id_notificacion);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear notificación (email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_destinatario\": \"{{emailInspector}}\",\n  \"tipo_notificacion\": \"ASIGNADA\",\n  \"titulo\": \"Nueva inspección\",\n  \"mensaje\": \"Se le asignó la inspección No. {{numeroInspeccion}}\",\n  \"referencia_tipo\": \"INSPECCION\",\n  \"referencia_id\": \"{{idInspeccion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/inspeccion/notificaciones",
+            "description": "Crea la notificación para un único destinatario, sin consultar Microsoft Entra ID. email_destinatario debe ser exactamente el preferred_username/UPN que traerá el token de esa persona: ya no hay forma de validarlo contra Entra ID en este flujo."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.id_notificacion) {",
+                  "        pm.collectionVariables.set(\"idNotificacion\", data.id_notificacion);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar notificación como vista",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/notificaciones/{{idNotificacion}}?accion=vista",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "notificaciones",
+                "{{idNotificacion}}"
+              ],
+              "query": [
+                {
+                  "key": "accion",
+                  "value": "vista"
+                }
+              ]
+            },
+            "description": "Marca fue_vista=true, independiente de fue_silenciada. Upsert en notificacion_lectura por (id_notificacion, email_lector). Retorna 403 si ni email ni algún rol del usuario coincide; 404 si no existe; 409 si ya está cerrada (CERRADA)."
+          },
+          "response": []
+        },
+        {
+          "name": "Marcar notificación como silenciada",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/inspeccion/notificaciones/{{idNotificacion}}?accion=silenciada",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "inspeccion",
+                "notificaciones",
+                "{{idNotificacion}}"
+              ],
+              "query": [
+                {
+                  "key": "accion",
+                  "value": "silenciada"
+                }
+              ]
+            },
+            "description": "Marca fue_silenciada=true, independiente de fue_vista. Upsert en notificacion_lectura por (id_notificacion, email_lector). Retorna 403 si ni email ni algún rol del usuario coincide; 404 si no existe; 409 si ya está cerrada (CERRADA)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "Ejecutar alertas de vencimiento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Email",
+                "value": "{{xUserEmail}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/inspeccion/jobs/alertas-vencimiento",
+            "description": "HU.5 — Disparador automático de alertas de vencimiento. Emite notificaciones de 'próxima a vencer' a los inspectores asignados de cada finca en estado PROXIMA (vencimiento entre hoy y hoy+10 días, idéntico a filtro /control). Pensado para ejecutarse una vez al día desde scheduler externo (EventBridge 8:00 AM). En cada corrida: (1) identifica fincas próximas a vencer, (2) crea notificación nueva dirigida al email del inspector asignado (se omiten las fincas sin inspector), (3) silencia notificación anterior activa para que solo la de hoy aparezca sin leer, (4) marca anterior como vista+silenciada si la finca pasó de PROXIMA a VENCIDA. NOTA: Este es un endpoint interno; debe estar protegido y no exponerse en ALB público."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{bearerToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/v1/inspeccion/jobs/alertas-vencimiento"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "content-type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"fincas_evaluadas\": 45,\n  \"notificaciones_creadas\": 12,\n  \"notificaciones_silenciadas\": 3,\n  \"fincas_omitidas_sin_inspector\": 2\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test(\"Respuesta incluye fincas_evaluadas\", () => pm.expect(data).to.have.property(\"fincas_evaluadas\"));",
+                  "pm.test(\"Respuesta incluye notificaciones_creadas\", () => pm.expect(data).to.have.property(\"notificaciones_creadas\"));",
+                  "pm.test(\"Respuesta incluye notificaciones_silenciadas\", () => pm.expect(data).to.have.property(\"notificaciones_silenciadas\"));",
+                  "pm.test(\"Respuesta incluye fincas_omitidas_sin_inspector\", () => pm.expect(data).to.have.property(\"fincas_omitidas_sin_inspector\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const requestUrl = pm.variables.replaceIn(pm.request.url.toString());",
+          "const inspeccionesUrl = pm.collectionVariables.get(\"baseUrl\");",
+          "if (requestUrl.startsWith(inspeccionesUrl) && !pm.request.headers.has(\"X-Request-ID\")) {",
+          "    pm.request.headers.add({ key: \"X-Request-ID\", value: pm.variables.replaceIn(\"{{$guid}}\") });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const requestUrl = pm.variables.replaceIn(pm.request.url.toString());",
+          "const inspeccionesUrl = pm.collectionVariables.get(\"baseUrl\");",
+          "if (requestUrl.startsWith(inspeccionesUrl)) {",
+          "    pm.test(\"Incluye X-Request-ID\", () => pm.expect(pm.response.headers.has(\"X-Request-ID\")).to.be.true);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "corsOrigin",
+      "value": "http://localhost:4200",
+      "type": "string"
+    },
+    {
+      "key": "xUserEmail",
+      "value": "local@dev.test",
+      "type": "string"
+    },
+    {
+      "key": "bearerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "idInspeccion",
+      "value": "00000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "idBienInventario",
+      "value": "6ba7b810-9ea0-4bcb-9e49-2570fd894e78",
+      "type": "string"
+    },
+    {
+      "key": "idFotografia",
+      "value": "00000000-0000-4000-8000-000000000003",
+      "type": "string"
+    },
+    {
+      "key": "idLevantamiento",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "numeroInspeccion",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "numeroFinca",
+      "value": "3099",
+      "type": "string"
+    },
+    {
+      "key": "estatusBienInventarioId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "provinciaId",
+      "value": "8",
+      "type": "string"
+    },
+    {
+      "key": "distritoId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "corregimientoId",
+      "value": "4",
+      "type": "string"
+    },
+    {
+      "key": "rutaId",
+      "value": "00000000-0000-4000-8000-000000000101",
+      "type": "string"
+    },
+    {
+      "key": "rutaNombre",
+      "value": "Ruta Centro",
+      "type": "string"
+    },
+    {
+      "key": "emailInspector",
+      "value": "CFlores@realcloud5.onmicrosoft.com",
+      "type": "string"
+    },
+    {
+      "key": "idPeriodicidad",
+      "value": "6",
+      "type": "string"
+    },
+    {
+      "key": "fechaProgramada",
+      "value": "2026-09-01",
+      "type": "string"
+    },
+    {
+      "key": "fechaReprogramada",
+      "value": "2026-09-15",
+      "type": "string"
+    },
+    {
+      "key": "fechaLevantamiento",
+      "value": "2026-08-25",
+      "type": "string"
+    },
+    {
+      "key": "pagina",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "tamanio",
+      "value": "15",
+      "type": "string"
+    },
+    {
+      "key": "nuevoIngreso",
+      "value": "true",
+      "type": "string"
+    },
+    {
+      "key": "alerta",
+      "value": "PROXIMA",
+      "type": "string"
+    },
+    {
+      "key": "monthLastInsp",
+      "value": "8",
+      "type": "string"
+    },
+    {
+      "key": "monthExpiration",
+      "value": "9",
+      "type": "string"
+    },
+    {
+      "key": "fechaDesde",
+      "value": "2026-08-01",
+      "type": "string"
+    },
+    {
+      "key": "fechaHasta",
+      "value": "2026-08-31",
+      "type": "string"
+    },
+    {
+      "key": "idNotificacion",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "urlDescarga",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subidaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "urlCarga",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "zipTamanoBytes",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "zipSha256",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cantidadLevantamientos",
+      "value": "1",
+      "type": "string"
+    }
+  ]
+}
